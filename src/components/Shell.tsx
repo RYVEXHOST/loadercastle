@@ -13,10 +13,11 @@ interface Props {
   toast: string;
   session: AuthSession;
   onLogout: () => void;
+  brandName: string;
   children: React.ReactNode;
 }
 
-export function Shell({ activeTab, setActiveTab, branches, activeBranchId, setActiveBranchId, syncStatus, pendingWrites, toast, session, onLogout, children }: Props) {
+export function Shell({ activeTab, setActiveTab, branches, activeBranchId, setActiveBranchId, syncStatus, pendingWrites, toast, session, onLogout, brandName, children }: Props) {
   const visibleTabs = session.role === 'admin' ? appTabs : appTabs.filter((tab) => ['Dashboard', 'POS', 'Tables', 'Loyalty'].includes(tab));
 
   return (
@@ -24,7 +25,7 @@ export function Shell({ activeTab, setActiveTab, branches, activeBranchId, setAc
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">LC</div>
-          <div><strong>Loader Castle</strong><span>Restaurant POS</span></div>
+          <div><strong>{brandName}</strong><span>Restaurant POS</span></div>
         </div>
         <nav>
           {visibleTabs.map((tab) => (

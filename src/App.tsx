@@ -5,7 +5,7 @@ import { ReceiptPreview } from './components/Receipt';
 import { Shell } from './components/Shell';
 import { useAuthSession } from './hooks/useAuthSession';
 import { useRestaurantStore } from './hooks/useRestaurantStore';
-import type { CartItem, MenuItem, PaymentMode, RestaurantTable, TableOrder, TableOrderStatus, Transaction } from './types/models';
+import type { Branch, CartItem, MenuItem, PaymentMode, ReceiptSettings, RestaurantTable, TableOrder, TableOrderStatus, Transaction } from './types/models';
 import { calculateTotals, formatINR } from './utils/money';
 
 const paymentModes: PaymentMode[] = ['Cash', 'UPI', 'Card', 'Split Payment'];
@@ -79,6 +79,7 @@ export default function App() {
       toast={store.toast}
       session={auth.session}
       onLogout={auth.logout}
+      brandName={store.branchReceipt?.storeName ?? store.activeBranch?.name ?? 'Loader Castle'}
     >
       {store.activeTab === 'POS' && (
         <section className="pos-grid">
@@ -137,7 +138,16 @@ export default function App() {
           onOrderStatusUpdate={store.updateTableOrderStatus}
         />
       )}
-      {auth.session.role === 'admin' && store.activeTab === 'Inventory' && <Inventory items={store.branchMenu} onSave={store.updateMenuItem} onCreate={store.addMenuItem} />}
+      {auth.session.role === 'admin' && store.activeTab === 'Inventory' && (
+        <Inventory
+          items={store.branchMenu}
+          onSave={store.updateMenuItem}
+          onDelete={store.deleteMenuItem}
+          onCreate={store.addMenuItem}
+          onRenameCategory={store.renameCategory}
+          onDeleteCategory={store.deleteCategory}
+        />
+      )}
       {store.activeTab === 'Loyalty' && <Loyalty members={customers} branchId={store.activeBranchId} onRegister={store.registerMember} />}
       {auth.session.role === 'admin' && store.activeTab === 'Attendance' && <Attendance employees={store.branchEmployees} onCycle={store.cycleAttendance} />}
       {auth.session.role === 'admin' && store.activeTab === 'Settings' && <Settings store={store} />}
@@ -340,19 +350,70 @@ function OrderColumn({ title, orders, isAdmin, onOrderStatusUpdate }: { title: s
   );
 }
 
-function Inventory({ items, onSave, onCreate }: { items: MenuItem[]; onSave: (item: MenuItem) => Promise<void>; onCreate: (item: Omit<MenuItem, 'id' | 'branchId'>) => Promise<void> }) {
+function Inventory({
+  items,
+  onSave,
+  onDelete,
+  onCreate,
+  onRenameCategory,
+  onDeleteCategory,
+}: {
+  items: MenuItem[];
+  onSave: (item: MenuItem) => Promise<void>;
+  onDelete: (itemId: string) => Promise<void>;
+  onCreate: (item: Omit<MenuItem, 'id' | 'branchId'>) => Promise<void>;
+  onRenameCategory: (fromCategory: string, toCategory: string) => Promise<void>;
+  onDeleteCategory: (category: string) => Promise<void>;
+}) {
   const [draft, setDraft] = useState({ name: '', category: 'Mains', price: 250, stock: 12 });
+  const [categoryDrafts, setCategoryDrafts] = useState<Record<string, string>>({});
+  const categories = Array.from(new Set(items.map((item) => item.category))).sort();
+
   return (
-    <section className="table-panel">
-      <div className="inline-form">
-        <input placeholder="Dish name" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-        <input placeholder="Category" value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} />
-        <input type="number" value={draft.price} onChange={(event) => setDraft({ ...draft, price: Number(event.target.value) })} />
-        <button className="button primary" onClick={() => onCreate({ ...draft, available: true, lowStockAt: 10, ingredients: ['fresh produce'] })}>Add item</button>
+    <section className="inventory-workspace">
+      <div className="table-panel">
+        <div className="panel-heading">
+          <h2>Menu Items</h2>
+          <span>Edit every item field or remove items.</span>
+        </div>
+        <div className="inline-form">
+          <input placeholder="Dish name" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+          <input placeholder="Category" value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} />
+          <input type="number" value={draft.price} onChange={(event) => setDraft({ ...draft, price: Number(event.target.value) })} />
+          <input type="number" value={draft.stock} onChange={(event) => setDraft({ ...draft, stock: Number(event.target.value) })} />
+          <button className="button primary" onClick={() => onCreate({ ...draft, available: true, lowStockAt: 10, ingredients: ['fresh produce'] })}>Add item</button>
+        </div>
+        <table className="editable-table"><thead><tr><th>Item</th><th>Category</th><th>Price</th><th>Stock</th><th>Low</th><th>Ingredients</th><th>Available</th><th></th></tr></thead><tbody>
+          {items.map((item) => (
+            <tr key={item.id}>
+              <td><input value={item.name} onChange={(event) => onSave({ ...item, name: event.target.value })} /></td>
+              <td><input value={item.category} onChange={(event) => onSave({ ...item, category: event.target.value })} /></td>
+              <td><input type="number" value={item.price} onChange={(event) => onSave({ ...item, price: Number(event.target.value) })} /></td>
+              <td><input type="number" value={item.stock} onChange={(event) => onSave({ ...item, stock: Number(event.target.value) })} /></td>
+              <td><input type="number" value={item.lowStockAt} onChange={(event) => onSave({ ...item, lowStockAt: Number(event.target.value) })} /></td>
+              <td><input value={item.ingredients.join(', ')} onChange={(event) => onSave({ ...item, ingredients: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} /></td>
+              <td><input type="checkbox" checked={item.available} onChange={(event) => onSave({ ...item, available: event.target.checked })} /></td>
+              <td><button className="danger-button" onClick={() => onDelete(item.id)}>Delete</button></td>
+            </tr>
+          ))}
+        </tbody></table>
       </div>
-      <table><thead><tr><th>Item</th><th>Category</th><th>Price</th><th>Stock</th><th>Available</th></tr></thead><tbody>
-        {items.map((item) => <tr key={item.id}><td>{item.name}</td><td>{item.category}</td><td>{formatINR(item.price)}</td><td><input type="number" value={item.stock} onChange={(event) => onSave({ ...item, stock: Number(event.target.value) })} /></td><td><input type="checkbox" checked={item.available} onChange={(event) => onSave({ ...item, available: event.target.checked })} /></td></tr>)}
-      </tbody></table>
+
+      <aside className="analytics-card category-manager">
+        <h2>Categories</h2>
+        <p>Edit category names across menu items, or delete a category with all items inside it.</p>
+        <div className="category-list">
+          {categories.map((category) => (
+            <div className="category-row" key={category}>
+              <input value={categoryDrafts[category] ?? category} onChange={(event) => setCategoryDrafts({ ...categoryDrafts, [category]: event.target.value })} />
+              <span>{items.filter((item) => item.category === category).length} items</span>
+              <button className="button" onClick={() => onRenameCategory(category, categoryDrafts[category] ?? category)}>Rename</button>
+              <button className="danger-button" onClick={() => onDeleteCategory(category)}>Delete</button>
+            </div>
+          ))}
+          {categories.length === 0 && <div className="empty small">No categories yet.</div>}
+        </div>
+      </aside>
     </section>
   );
 }
@@ -376,11 +437,46 @@ function Attendance({ employees, onCycle }: { employees: ReturnType<typeof useRe
 function Settings({ store }: { store: ReturnType<typeof useRestaurantStore> }) {
   const [branchName, setBranchName] = useState('');
   const rates = [2, 5, 8.25, 12, 18];
+  const activeBranch = store.activeBranch;
+  const receipt = store.branchReceipt;
   return (
     <section className="settings-grid">
       <div className="analytics-card"><h2>GST settings</h2><div className="payment-tabs">{rates.map((rate) => <button className={store.branchTax.rate === rate ? 'selected' : ''} key={rate} onClick={() => store.updateTax({ ...store.branchTax, rate })}>{rate}%</button>)}</div><label>Custom GST %<input type="number" value={store.branchTax.rate} onChange={(event) => store.updateTax({ ...store.branchTax, rate: Number(event.target.value) })} /></label><p>CGST/SGST enabled for intra-state billing. IGST field is retained for inter-state readiness.</p></div>
+      {activeBranch && receipt && (
+        <BrandSettings branch={activeBranch} receipt={receipt} onBranchUpdate={store.updateBranch} onReceiptUpdate={store.updateReceipt} />
+      )}
       <div className="analytics-card"><h2>Branches</h2><div className="inline-form"><input placeholder="New branch name" value={branchName} onChange={(event) => setBranchName(event.target.value)} /><button className="button primary" onClick={() => store.addBranch(branchName)}>Create branch</button></div>{store.state?.branches.map((branch) => <p key={branch.id}>{branch.name} · {branch.gstin || 'GSTIN pending'}</p>)}</div>
       <div className="analytics-card"><h2>Seed utility</h2><p>Populate Database Seed Data is idempotent: first boot hydrates IndexedDB and Firestore mirroring uses document IDs with merge semantics, so reruns update safely.</p></div>
     </section>
+  );
+}
+
+function BrandSettings({
+  branch,
+  receipt,
+  onBranchUpdate,
+  onReceiptUpdate,
+}: {
+  branch: Branch;
+  receipt: ReceiptSettings;
+  onBranchUpdate: (branch: Branch) => Promise<void>;
+  onReceiptUpdate: (receipt: ReceiptSettings) => Promise<void>;
+}) {
+  return (
+    <div className="analytics-card brand-settings-card">
+      <h2>Cafe & Branch Identity</h2>
+      <label>Cafe / receipt name <input value={receipt.storeName} onChange={(event) => onReceiptUpdate({ ...receipt, storeName: event.target.value })} /></label>
+      <label>Branch name <input value={branch.name} onChange={(event) => onBranchUpdate({ ...branch, name: event.target.value })} /></label>
+      <label>Address <input value={branch.address} onChange={(event) => onBranchUpdate({ ...branch, address: event.target.value })} /></label>
+      <label>Phone <input value={branch.phone} onChange={(event) => onBranchUpdate({ ...branch, phone: event.target.value })} /></label>
+      <label>GSTIN <input value={branch.gstin} onChange={(event) => onBranchUpdate({ ...branch, gstin: event.target.value })} /></label>
+      <label>Receipt slogan <input value={receipt.slogan} onChange={(event) => onReceiptUpdate({ ...receipt, slogan: event.target.value })} /></label>
+      <label>Printer width
+        <select value={receipt.printerWidth} onChange={(event) => onReceiptUpdate({ ...receipt, printerWidth: event.target.value as ReceiptSettings['printerWidth'] })}>
+          <option value="80mm">80mm</option>
+          <option value="58mm">58mm</option>
+        </select>
+      </label>
+    </div>
   );
 }

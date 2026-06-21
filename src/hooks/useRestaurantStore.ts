@@ -3,7 +3,7 @@ import { createBranchDefaults } from '../data/seed';
 import { flushPendingWrites } from '../services/sync';
 import { getPendingWrites, loadState, saveState } from '../services/localStore';
 import { hasFirebaseConfig, mirrorSeedToFirestore } from '../services/firebase';
-import type { AttendanceStatus, CartItem, LoyaltyMember, MenuItem, PaymentMode, RestaurantTable, SeedState, SplitPayment, SyncStatus, TableOrder, TableOrderStatus, TaxSettings, Transaction } from '../types/models';
+import type { AttendanceStatus, Branch, CartItem, LoyaltyMember, MenuItem, PaymentMode, ReceiptSettings, RestaurantTable, SeedState, SplitPayment, SyncStatus, TableOrder, TableOrderStatus, TaxSettings, Transaction } from '../types/models';
 import { calculateTotals, createInvoiceNo } from '../utils/money';
 
 const tabs = ['Dashboard', 'POS', 'Tables', 'Inventory', 'Loyalty', 'Attendance', 'Settings'] as const;
@@ -103,10 +103,44 @@ export function useRestaurantStore() {
     await persist({ ...state, menuItems: state.menuItems.map((existing) => (existing.id === item.id ? item : existing)) }, 'menu:update');
   };
 
+  const deleteMenuItem = async (itemId: string) => {
+    if (!state) return;
+    await persist({ ...state, menuItems: state.menuItems.filter((item) => item.id !== itemId) }, 'menu:delete');
+  };
+
   const addMenuItem = async (item: Omit<MenuItem, 'id' | 'branchId'>) => {
     if (!state) return;
     const nextItem: MenuItem = { ...item, id: `${branchId}-item-${crypto.randomUUID()}`, branchId };
     await persist({ ...state, menuItems: [nextItem, ...state.menuItems] }, 'menu:create');
+  };
+
+  const renameCategory = async (fromCategory: string, toCategory: string) => {
+    if (!state || !fromCategory.trim() || !toCategory.trim()) return;
+    await persist({
+      ...state,
+      menuItems: state.menuItems.map((item) => (item.branchId === branchId && item.category === fromCategory ? { ...item, category: toCategory.trim() } : item)),
+    }, 'category:rename');
+  };
+
+  const deleteCategory = async (category: string) => {
+    if (!state || !category.trim()) return;
+    await persist({
+      ...state,
+      menuItems: state.menuItems.filter((item) => !(item.branchId === branchId && item.category === category)),
+    }, 'category:delete');
+  };
+
+  const updateBranch = async (branch: Branch) => {
+    if (!state) return;
+    await persist({ ...state, branches: state.branches.map((item) => (item.id === branch.id ? branch : item)) }, 'branch:update');
+  };
+
+  const updateReceipt = async (receipt: ReceiptSettings) => {
+    if (!state) return;
+    await persist({
+      ...state,
+      receiptSettings: state.receiptSettings.map((item) => (item.branchId === receipt.branchId ? receipt : item)),
+    }, 'receipt:update');
   };
 
   const updateTable = async (table: RestaurantTable) => {
@@ -234,7 +268,12 @@ export function useRestaurantStore() {
     branchReceipt,
     addBranch,
     updateMenuItem,
+    deleteMenuItem,
     addMenuItem,
+    renameCategory,
+    deleteCategory,
+    updateBranch,
+    updateReceipt,
     updateTable,
     addWaiterTableOrder,
     updateTableOrderStatus,
