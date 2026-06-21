@@ -1,0 +1,76 @@
+# Loader Castle Restaurant POS
+
+Production-oriented React + Vite restaurant POS and management system with offline-first local persistence, Firebase Firestore-ready sync, GST-friendly INR billing, loyalty, inventory, attendance, analytics, branch settings, and thermal receipt printing.
+
+## Run Locally
+
+```bash
+npm install
+npm run dev
+npm run build
+npm run preview
+```
+
+## Firebase Setup
+
+Copy `.env.example` to `.env` and fill the `VITE_FIREBASE_*` values from your Firebase web app. Firestore is initialized with `persistentLocalCache` and `persistentMultipleTabManager`. If Firebase variables are not present, the app still runs from IndexedDB and queues writes locally.
+
+## Offline-First Behavior
+
+- IndexedDB stores the full app state on first boot.
+- Checkout, inventory edits, loyalty registration/redemption, attendance updates, tax changes, branch creation, and analytics update immediately from local state.
+- Pending writes are tracked in IndexedDB and flushed to Firestore when the browser is online and Firebase config exists.
+- Firestore writes use stable document IDs and merge semantics, making seed hydration safe to run repeatedly.
+
+## Deployment
+
+Build static assets:
+
+```bash
+npm run build
+```
+
+PM2 static serving:
+
+```bash
+npm install -g pm2 serve
+pm2 serve dist 3000 --spa --name loader-castle-pos
+pm2 save
+```
+
+Nginx reverse proxy sample:
+
+```nginx
+server {
+  listen 80;
+  server_name pos.example.com;
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+```
+
+For direct static hosting with Nginx:
+
+```nginx
+server {
+  listen 80;
+  server_name pos.example.com;
+  root /var/www/loader-castle-pos/dist;
+  index index.html;
+
+  location / {
+    try_files $uri /index.html;
+  }
+}
+```
+
+## Print Receipts
+
+The receipt panel includes `@media print` CSS optimized for 80mm and 58mm thermal printers. Use the Settings receipt width in data if you want to switch defaults per branch.
