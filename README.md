@@ -24,6 +24,41 @@ Copy `.env.example` to `.env` and fill the `VITE_FIREBASE_*` values from your Fi
 
 ## Deployment
 
+### Vercel
+
+This project is ready for Vercel as a static Vite app.
+
+Vercel settings:
+
+- Framework Preset: `Vite`
+- Install Command: `npm install`
+- Build Command: `npm run build`
+- Output Directory: `dist`
+- Node.js Version: `20.x` or newer
+
+Add these environment variables in Vercel Project Settings before deploying with Firebase sync enabled:
+
+```bash
+VITE_FIREBASE_API_KEY
+VITE_FIREBASE_AUTH_DOMAIN
+VITE_FIREBASE_PROJECT_ID
+VITE_FIREBASE_STORAGE_BUCKET
+VITE_FIREBASE_MESSAGING_SENDER_ID
+VITE_FIREBASE_APP_ID
+```
+
+The included `vercel.json` config enables SPA fallback routing to `index.html`, long-lived asset caching, and basic security headers.
+
+Deploy with the Vercel CLI:
+
+```bash
+npm install -g vercel
+vercel
+vercel --prod
+```
+
+### Static Build
+
 Build static assets:
 
 ```bash
