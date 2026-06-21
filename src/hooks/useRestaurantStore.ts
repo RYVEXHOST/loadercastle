@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createBranchDefaults } from '../data/seed';
 import { flushPendingWrites } from '../services/sync';
 import { getPendingWrites, loadState, saveState } from '../services/localStore';
+import { hasFirebaseConfig, mirrorSeedToFirestore } from '../services/firebase';
 import type { AttendanceStatus, CartItem, LoyaltyMember, MenuItem, PaymentMode, SeedState, SplitPayment, SyncStatus, TaxSettings, Transaction } from '../types/models';
 import { calculateTotals, createInvoiceNo } from '../utils/money';
 
@@ -30,6 +31,9 @@ export function useRestaurantStore() {
     loadState().then((loaded) => {
       setState(loaded);
       setToast('Offline cache ready');
+      if (hasFirebaseConfig && navigator.onLine) {
+        mirrorSeedToFirestore(loaded).catch(() => setToast('Local cache ready. Cloud seed retry will happen after reconnect.'));
+      }
     });
     getPendingWrites().then((items) => setPendingWrites(items.length));
   }, []);
