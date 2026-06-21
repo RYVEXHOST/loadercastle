@@ -11,6 +11,26 @@ npm run build
 npm run preview
 ```
 
+## Login
+
+The app starts on a role-based login page.
+
+Demo admin:
+
+```text
+Email: admin@loadercastle.in
+Password: admin123
+```
+
+Demo user:
+
+```text
+Email: cashier@loadercastle.in
+Password: user123
+```
+
+Admin accounts can access all modules. User accounts are limited to Dashboard, POS, and Loyalty. The current implementation stores a local demo session and is structured so Firebase Auth can be connected next.
+
 ## Firebase Setup
 
 Copy `.env.example` to `.env` and fill the `VITE_FIREBASE_*` values from your Firebase web app. Firestore is initialized with `persistentLocalCache` and `persistentMultipleTabManager`. If Firebase variables are not present, the app still runs from IndexedDB and queues writes locally.

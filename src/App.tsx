@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BranchRevenueChart, DailyIncomeChart, PaymentDonut, TopDishesChart } from './components/Charts';
+import { LoginPage } from './components/LoginPage';
 import { ReceiptPreview } from './components/Receipt';
 import { Shell } from './components/Shell';
+import { useAuthSession } from './hooks/useAuthSession';
 import { useRestaurantStore } from './hooks/useRestaurantStore';
 import type { CartItem, MenuItem, PaymentMode, Transaction } from './types/models';
 import { calculateTotals, formatINR } from './utils/money';
@@ -9,6 +11,7 @@ import { calculateTotals, formatINR } from './utils/money';
 const paymentModes: PaymentMode[] = ['Cash', 'UPI', 'Card', 'Split Payment'];
 
 export default function App() {
+  const auth = useAuthSession();
   const store = useRestaurantStore();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discount, setDiscount] = useState(0);
@@ -24,6 +27,12 @@ export default function App() {
     `${customer.name} ${customer.phone} ${customer.memberCode}`.toLowerCase().includes(customerQuery.toLowerCase()),
   );
   const totals = calculateTotals(cart, discount, redeemPoints, store.branchTax);
+
+  useEffect(() => {
+    if (auth.session?.role === 'user' && !['Dashboard', 'POS', 'Loyalty'].includes(store.activeTab)) {
+      store.setActiveTab('POS');
+    }
+  }, [auth.session, store]);
 
   const addToCart = (item: MenuItem) => {
     if (!item.available) return;
@@ -55,6 +64,7 @@ export default function App() {
     }
   };
 
+  if (!auth.session) return <LoginPage error={auth.authError} onLogin={auth.login} />;
   if (!store.state) return <div className="loading">Preparing offline restaurant workspace...</div>;
 
   return (
@@ -67,6 +77,8 @@ export default function App() {
       syncStatus={store.syncStatus}
       pendingWrites={store.pendingWrites}
       toast={store.toast}
+      session={auth.session}
+      onLogout={auth.logout}
     >
       {store.activeTab === 'POS' && (
         <section className="pos-grid">
@@ -113,10 +125,10 @@ export default function App() {
       )}
 
       {store.activeTab === 'Dashboard' && <Dashboard store={store} />}
-      {store.activeTab === 'Inventory' && <Inventory items={store.branchMenu} onSave={store.updateMenuItem} onCreate={store.addMenuItem} />}
+      {auth.session.role === 'admin' && store.activeTab === 'Inventory' && <Inventory items={store.branchMenu} onSave={store.updateMenuItem} onCreate={store.addMenuItem} />}
       {store.activeTab === 'Loyalty' && <Loyalty members={customers} branchId={store.activeBranchId} onRegister={store.registerMember} />}
-      {store.activeTab === 'Attendance' && <Attendance employees={store.branchEmployees} onCycle={store.cycleAttendance} />}
-      {store.activeTab === 'Settings' && <Settings store={store} />}
+      {auth.session.role === 'admin' && store.activeTab === 'Attendance' && <Attendance employees={store.branchEmployees} onCycle={store.cycleAttendance} />}
+      {auth.session.role === 'admin' && store.activeTab === 'Settings' && <Settings store={store} />}
     </Shell>
   );
 }

@@ -1,4 +1,5 @@
 import { appTabs, type AppTab } from '../hooks/useRestaurantStore';
+import type { AuthSession } from '../types/auth';
 import type { Branch, SyncStatus } from '../types/models';
 
 interface Props {
@@ -10,10 +11,14 @@ interface Props {
   syncStatus: SyncStatus;
   pendingWrites: number;
   toast: string;
+  session: AuthSession;
+  onLogout: () => void;
   children: React.ReactNode;
 }
 
-export function Shell({ activeTab, setActiveTab, branches, activeBranchId, setActiveBranchId, syncStatus, pendingWrites, toast, children }: Props) {
+export function Shell({ activeTab, setActiveTab, branches, activeBranchId, setActiveBranchId, syncStatus, pendingWrites, toast, session, onLogout, children }: Props) {
+  const visibleTabs = session.role === 'admin' ? appTabs : appTabs.filter((tab) => ['Dashboard', 'POS', 'Loyalty'].includes(tab));
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -22,7 +27,7 @@ export function Shell({ activeTab, setActiveTab, branches, activeBranchId, setAc
           <div><strong>Loader Castle</strong><span>Restaurant POS</span></div>
         </div>
         <nav>
-          {appTabs.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>{tab}</button>
           ))}
         </nav>
@@ -39,6 +44,8 @@ export function Shell({ activeTab, setActiveTab, branches, activeBranchId, setAc
             </select>
             <span className={`sync-pill ${syncStatus}`}>{syncStatus}</span>
             <span className="sync-pill pending">{pendingWrites} pending</span>
+            <span className="sync-pill role">{session.role}</span>
+            <button className="logout-button" onClick={onLogout}>Logout</button>
           </div>
         </header>
         {children}
