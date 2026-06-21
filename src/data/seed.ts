@@ -1,4 +1,4 @@
-import type { Branch, Employee, LoyaltyMember, MenuItem, ReceiptSettings, RestaurantTable, SeedState, TableOrder, TaxSettings, Transaction } from '../types/models';
+import type { Branch, Employee, LoyaltyMember, MenuItem, PendingBill, ReceiptSettings, RestaurantTable, SeedState, TableOrder, TaxSettings, Transaction } from '../types/models';
 
 const now = new Date().toISOString();
 
@@ -82,6 +82,20 @@ export const taxSettings: TaxSettings[] = branches.map((branch, index) => ({
   mode: 'intra-state',
 }));
 
+export const pendingBills: PendingBill[] = branches.map((branch, index) => ({
+  id: `${branch.id}-pending-1`,
+  branchId: branch.id,
+  label: `Table ${index + 4}`,
+  createdAt: new Date(Date.now() - 1000 * 60 * (12 + index * 5)).toISOString(),
+  updatedAt: new Date(Date.now() - 1000 * 60 * (6 + index * 4)).toISOString(),
+  discount: 0,
+  redeemPoints: 0,
+  items: [
+    { menuItemId: `${branch.id}-item-1`, name: 'Paneer Tikka Platter', price: 285, quantity: 1, note: '', taxRate: taxSettings[index]?.rate ?? 5 },
+    { menuItemId: `${branch.id}-item-9`, name: 'Mango Lassi', price: 130, quantity: 1, note: '', taxRate: taxSettings[index]?.rate ?? 5 },
+  ],
+}));
+
 export const receiptSettings: ReceiptSettings[] = branches.map((branch) => ({
   branchId: branch.id,
   storeName: `Loader Castle ${branch.name}`,
@@ -130,6 +144,7 @@ export const seedState: SeedState = {
   menuItems,
   tables,
   tableOrders,
+  pendingBills,
   loyaltyMembers,
   employees,
   transactions,
@@ -161,6 +176,7 @@ export const createBranchDefaults = (name: string): SeedState => {
       status: 'Available',
     })),
     tableOrders: [],
+    pendingBills: [],
     loyaltyMembers: [],
     employees: [{ id: `${id}-emp-1`, branchId: id, name: 'New Cashier', role: 'Cashier', shift: '10:00-18:00', wagePerShift: 900, status: 'Scheduled', history: [] }],
     transactions: [],

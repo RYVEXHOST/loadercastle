@@ -65,12 +65,14 @@ export async function loadState(): Promise<SeedState> {
 function normalizeState(state: SeedState): SeedState {
   const missingTables = !Array.isArray(state.tables);
   const missingTableOrders = !Array.isArray(state.tableOrders);
-  if (!missingTables && !missingTableOrders) return state;
+  const missingPendingBills = !Array.isArray(state.pendingBills);
+  if (!missingTables && !missingTableOrders && !missingPendingBills) return state;
 
   return {
     ...state,
     tables: missingTables ? seedState.tables.filter((table) => state.branches.some((branch) => branch.id === table.branchId)) : state.tables,
     tableOrders: missingTableOrders ? seedState.tableOrders.filter((order) => state.branches.some((branch) => branch.id === order.branchId)) : state.tableOrders,
+    pendingBills: missingPendingBills ? [] : state.pendingBills,
   };
 }
 

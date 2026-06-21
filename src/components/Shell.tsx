@@ -18,7 +18,7 @@ interface Props {
 }
 
 export function Shell({ activeTab, setActiveTab, branches, activeBranchId, setActiveBranchId, syncStatus, pendingWrites, toast, session, onLogout, brandName, children }: Props) {
-  const visibleTabs = session.role === 'admin' ? appTabs : appTabs.filter((tab) => ['Dashboard', 'POS', 'Tables', 'Loyalty'].includes(tab));
+  const visibleTabs = session.role === 'admin' ? appTabs : appTabs.filter((tab) => ['Dashboard', 'POS', 'Pending Bills', 'Tables', 'Loyalty'].includes(tab));
 
   return (
     <div className="app-shell">

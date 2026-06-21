@@ -58,6 +58,18 @@ export interface TableOrder {
   note: string;
 }
 
+export interface PendingBill {
+  id: string;
+  branchId: string;
+  label: string;
+  createdAt: string;
+  updatedAt: string;
+  items: CartItem[];
+  discount: number;
+  redeemPoints: number;
+  customerId?: string;
+}
+
 export interface LoyaltyMember {
   id: string;
   memberCode: string;
@@ -137,6 +149,7 @@ export interface SeedState {
   menuItems: MenuItem[];
   tables: RestaurantTable[];
   tableOrders: TableOrder[];
+  pendingBills: PendingBill[];
   loyaltyMembers: LoyaltyMember[];
   employees: Employee[];
   transactions: Transaction[];

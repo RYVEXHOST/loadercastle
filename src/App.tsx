@@ -5,7 +5,7 @@ import { ReceiptPreview } from './components/Receipt';
 import { Shell } from './components/Shell';
 import { useAuthSession } from './hooks/useAuthSession';
 import { useRestaurantStore } from './hooks/useRestaurantStore';
-import type { Branch, CartItem, MenuItem, PaymentMode, ReceiptSettings, RestaurantTable, TableOrder, TableOrderStatus, Transaction } from './types/models';
+import type { Branch, CartItem, MenuItem, PaymentMode, PendingBill, ReceiptSettings, RestaurantTable, TableOrder, TableOrderStatus, Transaction } from './types/models';
 import { calculateTotals, formatINR } from './utils/money';
 
 const paymentModes: PaymentMode[] = ['Cash', 'UPI', 'Card', 'Split Payment'];
@@ -20,6 +20,8 @@ export default function App() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>();
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('UPI');
   const [lastTransaction, setLastTransaction] = useState<Transaction | undefined>();
+  const [pendingBillLabel, setPendingBillLabel] = useState('');
+  const [activePendingBillId, setActivePendingBillId] = useState<string | undefined>();
 
   const customers = store.state?.loyaltyMembers ?? [];
   const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId);
@@ -29,7 +31,7 @@ export default function App() {
   const totals = calculateTotals(cart, discount, redeemPoints, store.branchTax);
 
   useEffect(() => {
-    if (auth.session?.role === 'user' && !['Dashboard', 'POS', 'Tables', 'Loyalty'].includes(store.activeTab)) {
+    if (auth.session?.role === 'user' && !['Dashboard', 'POS', 'Pending Bills', 'Tables', 'Loyalty'].includes(store.activeTab)) {
       store.setActiveTab('POS');
     }
   }, [auth.session, store]);
@@ -55,13 +57,42 @@ export default function App() {
       paymentMode,
       splitPayments: paymentMode === 'Split Payment' ? [{ mode: 'UPI', amount: Math.ceil(totals.grandTotal / 2) }, { mode: 'Cash', amount: Math.floor(totals.grandTotal / 2) }] : [],
       customerId: selectedCustomerId,
+      pendingBillId: activePendingBillId,
     });
     if (transaction) {
       setLastTransaction(transaction);
       setCart([]);
       setDiscount(0);
       setRedeemPoints(0);
+      setSelectedCustomerId(undefined);
+      setPendingBillLabel('');
+      setActivePendingBillId(undefined);
     }
+  };
+
+  const saveCurrentBill = async () => {
+    const pendingBill = await store.savePendingBill({
+      id: activePendingBillId,
+      label: pendingBillLabel,
+      cart,
+      discount,
+      redeemPoints,
+      customerId: selectedCustomerId,
+    });
+    if (pendingBill) {
+      setPendingBillLabel(pendingBill.label);
+      setActivePendingBillId(pendingBill.id);
+    }
+  };
+
+  const loadPendingBill = (bill: PendingBill) => {
+    setCart(bill.items);
+    setDiscount(bill.discount);
+    setRedeemPoints(bill.redeemPoints);
+    setSelectedCustomerId(bill.customerId);
+    setPendingBillLabel(bill.label);
+    setActivePendingBillId(bill.id);
+    store.setActiveTab('POS');
   };
 
   if (!auth.session) return <LoginPage error={auth.authError} onLogin={auth.login} />;
@@ -112,6 +143,11 @@ export default function App() {
               {cart.length === 0 && <div className="empty">Tap dishes to start a bill.</div>}
             </div>
             <div className="checkout-box">
+              <label>Pending bill name <input value={pendingBillLabel} onChange={(event) => setPendingBillLabel(event.target.value)} placeholder="Table 4, John, takeaway" /></label>
+              <div className="checkout-actions">
+                <button className="button" disabled={cart.length === 0} onClick={saveCurrentBill}>{activePendingBillId ? 'Update Pending Bill' : 'Save Pending Bill'}</button>
+                {activePendingBillId && <button className="button" onClick={() => { setCart([]); setDiscount(0); setRedeemPoints(0); setSelectedCustomerId(undefined); setPendingBillLabel(''); setActivePendingBillId(undefined); }}>Clear Loaded Bill</button>}
+              </div>
               <label>Discount <input type="number" value={discount} onChange={(event) => setDiscount(Number(event.target.value))} /></label>
               <label>Loyalty search <input value={customerQuery} onChange={(event) => setCustomerQuery(event.target.value)} placeholder="Name, phone, code" /></label>
               {customerQuery && <div className="search-results">{customerResults.slice(0, 4).map((customer) => <button key={customer.id} onClick={() => setSelectedCustomerId(customer.id)}>{customer.name} · {customer.memberCode} · {customer.points} pts</button>)}</div>}
@@ -126,6 +162,7 @@ export default function App() {
       )}
 
       {store.activeTab === 'Dashboard' && <Dashboard store={store} />}
+      {store.activeTab === 'Pending Bills' && <PendingBills bills={store.branchPendingBills} taxRate={store.branchTax.rate} onLoad={loadPendingBill} onDelete={store.deletePendingBill} />}
       {store.activeTab === 'Tables' && (
         <TableOrdersSection
           tables={store.branchTables}
@@ -190,6 +227,50 @@ function Dashboard({ store }: { store: ReturnType<typeof useRestaurantStore> }) 
 
 function Metric({ title, value }: { title: string; value: string }) {
   return <div className="metric"><span>{title}</span><strong>{value}</strong></div>;
+}
+
+function PendingBills({
+  bills,
+  taxRate,
+  onLoad,
+  onDelete,
+}: {
+  bills: PendingBill[];
+  taxRate: number;
+  onLoad: (bill: PendingBill) => void;
+  onDelete: (billId: string) => Promise<void>;
+}) {
+  return (
+    <section className="pending-bills">
+      {bills.map((bill) => {
+        const totals = calculateTotals(bill.items, bill.discount, bill.redeemPoints, { branchId: bill.branchId, rate: taxRate, mode: 'intra-state' });
+        return (
+          <article className="pending-bill-card" key={bill.id}>
+            <div className="pending-bill-header">
+              <div>
+                <h2>{bill.label}</h2>
+                <span>{new Date(bill.updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+              </div>
+              <strong>{formatINR(totals.grandTotal)}</strong>
+            </div>
+            <div className="pending-bill-lines">
+              {bill.items.map((item) => (
+                <span key={`${bill.id}-${item.menuItemId}-${item.note}`}>
+                  {item.name} x {item.quantity}
+                  <b>{formatINR(item.price * item.quantity)}</b>
+                </span>
+              ))}
+            </div>
+            <div className="pending-bill-actions">
+              <button className="button primary" onClick={() => onLoad(bill)}>Open in POS</button>
+              <button className="danger-button" onClick={() => onDelete(bill.id)}>Delete</button>
+            </div>
+          </article>
+        );
+      })}
+      {bills.length === 0 && <div className="empty">No pending bills for this branch.</div>}
+    </section>
+  );
 }
 
 function TableOrdersSection({
