@@ -1,6 +1,9 @@
 export type PaymentMode = 'Cash' | 'UPI' | 'Card' | 'Split Payment';
 export type AttendanceStatus = 'Scheduled' | 'Completed' | 'Absent';
 export type SyncStatus = 'online' | 'offline';
+export type TableStatus = 'Available' | 'Occupied' | 'Needs Service' | 'Billing';
+export type TableOrderSource = 'QR' | 'Waiter';
+export type TableOrderStatus = 'Placed' | 'Preparing' | 'Served' | 'Cancelled';
 
 export interface Branch {
   id: string;
@@ -33,6 +36,26 @@ export interface MenuItem {
   stock: number;
   lowStockAt: number;
   ingredients: string[];
+}
+
+export interface RestaurantTable {
+  id: string;
+  branchId: string;
+  number: number;
+  seats: number;
+  status: TableStatus;
+}
+
+export interface TableOrder {
+  id: string;
+  branchId: string;
+  tableId: string;
+  source: TableOrderSource;
+  status: TableOrderStatus;
+  customerName?: string;
+  createdAt: string;
+  items: CartItem[];
+  note: string;
 }
 
 export interface LoyaltyMember {
@@ -112,6 +135,8 @@ export interface Transaction {
 export interface SeedState {
   branches: Branch[];
   menuItems: MenuItem[];
+  tables: RestaurantTable[];
+  tableOrders: TableOrder[];
   loyaltyMembers: LoyaltyMember[];
   employees: Employee[];
   transactions: Transaction[];

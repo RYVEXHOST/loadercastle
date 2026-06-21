@@ -52,10 +52,26 @@ async function getValue<T extends StoreValue>(key: string): Promise<T | null> {
 
 export async function loadState(): Promise<SeedState> {
   const existing = await getValue<SeedState>(STATE_KEY);
-  if (existing) return existing;
+  if (existing) {
+    const normalized = normalizeState(existing);
+    if (normalized !== existing) await putValue(STATE_KEY, normalized);
+    return normalized;
+  }
   await putValue(STATE_KEY, seedState);
   await putValue(QUEUE_KEY, []);
   return seedState;
+}
+
+function normalizeState(state: SeedState): SeedState {
+  const missingTables = !Array.isArray(state.tables);
+  const missingTableOrders = !Array.isArray(state.tableOrders);
+  if (!missingTables && !missingTableOrders) return state;
+
+  return {
+    ...state,
+    tables: missingTables ? seedState.tables.filter((table) => state.branches.some((branch) => branch.id === table.branchId)) : state.tables,
+    tableOrders: missingTableOrders ? seedState.tableOrders.filter((order) => state.branches.some((branch) => branch.id === order.branchId)) : state.tableOrders,
+  };
 }
 
 export async function saveState(state: SeedState, pendingType: string) {

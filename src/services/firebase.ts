@@ -44,6 +44,8 @@ export async function mirrorSeedToFirestore(seed: SeedState) {
   await Promise.all([
     ...seed.branches.map((item) => setDoc(doc(collection(firestore, 'branches'), item.id), item, { merge: true })),
     ...seed.menuItems.map((item) => setDoc(doc(collection(firestore, 'menuItems'), item.id), item, { merge: true })),
+    ...seed.tables.map((item) => setDoc(doc(collection(firestore, 'tables'), item.id), item, { merge: true })),
+    ...seed.tableOrders.map((item) => setDoc(doc(collection(firestore, 'tableOrders'), item.id), item, { merge: true })),
     ...seed.loyaltyMembers.map((item) => setDoc(doc(collection(firestore, 'loyaltyMembers'), item.id), item, { merge: true })),
     ...seed.employees.map((item) => setDoc(doc(collection(firestore, 'employees'), item.id), item, { merge: true })),
     ...seed.transactions.map((item) => setDoc(doc(collection(firestore, 'transactions'), item.id), item, { merge: true })),

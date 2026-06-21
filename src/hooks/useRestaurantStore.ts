@@ -3,10 +3,10 @@ import { createBranchDefaults } from '../data/seed';
 import { flushPendingWrites } from '../services/sync';
 import { getPendingWrites, loadState, saveState } from '../services/localStore';
 import { hasFirebaseConfig, mirrorSeedToFirestore } from '../services/firebase';
-import type { AttendanceStatus, CartItem, LoyaltyMember, MenuItem, PaymentMode, SeedState, SplitPayment, SyncStatus, TaxSettings, Transaction } from '../types/models';
+import type { AttendanceStatus, CartItem, LoyaltyMember, MenuItem, PaymentMode, RestaurantTable, SeedState, SplitPayment, SyncStatus, TableOrder, TableOrderStatus, TaxSettings, Transaction } from '../types/models';
 import { calculateTotals, createInvoiceNo } from '../utils/money';
 
-const tabs = ['Dashboard', 'POS', 'Inventory', 'Loyalty', 'Attendance', 'Settings'] as const;
+const tabs = ['Dashboard', 'POS', 'Tables', 'Inventory', 'Loyalty', 'Attendance', 'Settings'] as const;
 export type AppTab = (typeof tabs)[number];
 export const appTabs = [...tabs];
 
@@ -17,6 +17,12 @@ interface CheckoutInput {
   paymentMode: PaymentMode;
   splitPayments: SplitPayment[];
   customerId?: string;
+}
+
+interface TableOrderInput {
+  tableId: string;
+  items: CartItem[];
+  note: string;
 }
 
 export function useRestaurantStore() {
@@ -67,6 +73,8 @@ export function useRestaurantStore() {
   const activeBranch = state?.branches.find((branch) => branch.id === activeBranchId) ?? state?.branches[0];
   const branchId = activeBranch?.id ?? activeBranchId;
   const branchMenu = useMemo(() => state?.menuItems.filter((item) => item.branchId === branchId) ?? [], [state, branchId]);
+  const branchTables = useMemo(() => state?.tables.filter((item) => item.branchId === branchId).sort((a, b) => a.number - b.number) ?? [], [state, branchId]);
+  const branchTableOrders = useMemo(() => state?.tableOrders.filter((item) => item.branchId === branchId) ?? [], [state, branchId]);
   const branchTransactions = useMemo(() => state?.transactions.filter((item) => item.branchId === branchId) ?? [], [state, branchId]);
   const branchEmployees = useMemo(() => state?.employees.filter((item) => item.branchId === branchId) ?? [], [state, branchId]);
   const branchTax = state?.taxSettings.find((item) => item.branchId === branchId) ?? { branchId, rate: 5, mode: 'intra-state' as const };
@@ -78,6 +86,8 @@ export function useRestaurantStore() {
     const next = {
       branches: [...state.branches, ...defaults.branches],
       menuItems: [...state.menuItems, ...defaults.menuItems],
+      tables: [...state.tables, ...defaults.tables],
+      tableOrders: [...state.tableOrders, ...defaults.tableOrders],
       loyaltyMembers: state.loyaltyMembers,
       employees: [...state.employees, ...defaults.employees],
       transactions: state.transactions,
@@ -97,6 +107,33 @@ export function useRestaurantStore() {
     if (!state) return;
     const nextItem: MenuItem = { ...item, id: `${branchId}-item-${crypto.randomUUID()}`, branchId };
     await persist({ ...state, menuItems: [nextItem, ...state.menuItems] }, 'menu:create');
+  };
+
+  const updateTable = async (table: RestaurantTable) => {
+    if (!state) return;
+    await persist({ ...state, tables: state.tables.map((existing) => (existing.id === table.id ? table : existing)) }, 'table:update');
+  };
+
+  const addWaiterTableOrder = async (input: TableOrderInput) => {
+    if (!state || input.items.length === 0) return;
+    const nextOrder: TableOrder = {
+      id: `table-order-${crypto.randomUUID()}`,
+      branchId,
+      tableId: input.tableId,
+      source: 'Waiter',
+      status: 'Placed',
+      customerName: 'Walk-in',
+      createdAt: new Date().toISOString(),
+      items: input.items,
+      note: input.note.trim(),
+    };
+    const nextTables = state.tables.map((table) => (table.id === input.tableId ? { ...table, status: 'Occupied' as const } : table));
+    await persist({ ...state, tableOrders: [nextOrder, ...state.tableOrders], tables: nextTables }, 'table-order:create');
+  };
+
+  const updateTableOrderStatus = async (orderId: string, status: TableOrderStatus) => {
+    if (!state) return;
+    await persist({ ...state, tableOrders: state.tableOrders.map((order) => (order.id === orderId ? { ...order, status } : order)) }, 'table-order:update');
   };
 
   const updateTax = async (settings: TaxSettings) => {
@@ -189,6 +226,8 @@ export function useRestaurantStore() {
     pendingWrites,
     toast,
     branchMenu,
+    branchTables,
+    branchTableOrders,
     branchTransactions,
     branchEmployees,
     branchTax,
@@ -196,6 +235,9 @@ export function useRestaurantStore() {
     addBranch,
     updateMenuItem,
     addMenuItem,
+    updateTable,
+    addWaiterTableOrder,
+    updateTableOrderStatus,
     updateTax,
     registerMember,
     cycleAttendance,

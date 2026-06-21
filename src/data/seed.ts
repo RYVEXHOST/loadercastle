@@ -1,4 +1,4 @@
-import type { Branch, Employee, LoyaltyMember, MenuItem, ReceiptSettings, SeedState, TaxSettings, Transaction } from '../types/models';
+import type { Branch, Employee, LoyaltyMember, MenuItem, ReceiptSettings, RestaurantTable, SeedState, TableOrder, TaxSettings, Transaction } from '../types/models';
 
 const now = new Date().toISOString();
 
@@ -34,6 +34,47 @@ export const menuItems: MenuItem[] = branches.flatMap((branch) =>
     ingredients: category === 'Beverages' ? ['milk', 'spice mix'] : ['spice mix', 'fresh produce', 'ghee'],
   })),
 );
+
+export const tables: RestaurantTable[] = branches.flatMap((branch) =>
+  Array.from({ length: 12 }, (_, index) => ({
+    id: `${branch.id}-table-${index + 1}`,
+    branchId: branch.id,
+    number: index + 1,
+    seats: index % 4 === 0 ? 6 : index % 3 === 0 ? 2 : 4,
+    status: index === 1 ? 'Needs Service' : index === 2 ? 'Billing' : index < 5 ? 'Occupied' : 'Available',
+  })),
+);
+
+export const tableOrders: TableOrder[] = branches.flatMap((branch) => [
+  {
+    id: `${branch.id}-qr-order-1`,
+    branchId: branch.id,
+    tableId: `${branch.id}-table-2`,
+    source: 'QR',
+    status: 'Placed',
+    customerName: 'QR Guest',
+    createdAt: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
+    note: 'No onion',
+    items: [
+      { menuItemId: `${branch.id}-item-1`, name: 'Paneer Tikka Platter', price: 285, quantity: 1, note: 'No onion', taxRate: 5 },
+      { menuItemId: `${branch.id}-item-9`, name: 'Mango Lassi', price: 130, quantity: 2, note: '', taxRate: 5 },
+    ],
+  },
+  {
+    id: `${branch.id}-waiter-order-1`,
+    branchId: branch.id,
+    tableId: `${branch.id}-table-3`,
+    source: 'Waiter',
+    status: 'Preparing',
+    customerName: 'Walk-in',
+    createdAt: new Date(Date.now() - 1000 * 60 * 16).toISOString(),
+    note: 'Serve starters first',
+    items: [
+      { menuItemId: `${branch.id}-item-3`, name: 'Butter Chicken', price: 420, quantity: 1, note: 'Medium spice', taxRate: 5 },
+      { menuItemId: `${branch.id}-item-8`, name: 'Filter Coffee', price: 90, quantity: 2, note: '', taxRate: 5 },
+    ],
+  },
+]);
 
 export const taxSettings: TaxSettings[] = branches.map((branch, index) => ({
   branchId: branch.id,
@@ -87,6 +128,8 @@ export const transactions: Transaction[] = branches.map((branch, index) => ({
 export const seedState: SeedState = {
   branches,
   menuItems,
+  tables,
+  tableOrders,
   loyaltyMembers,
   employees,
   transactions,
@@ -110,6 +153,14 @@ export const createBranchDefaults = (name: string): SeedState => {
       lowStockAt: 10,
       ingredients: ['fresh produce', 'spice mix'],
     })),
+    tables: Array.from({ length: 10 }, (_, index) => ({
+      id: `${id}-table-${index + 1}`,
+      branchId: id,
+      number: index + 1,
+      seats: index % 4 === 0 ? 6 : 4,
+      status: 'Available',
+    })),
+    tableOrders: [],
     loyaltyMembers: [],
     employees: [{ id: `${id}-emp-1`, branchId: id, name: 'New Cashier', role: 'Cashier', shift: '10:00-18:00', wagePerShift: 900, status: 'Scheduled', history: [] }],
     transactions: [],

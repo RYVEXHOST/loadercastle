@@ -5,7 +5,7 @@ import { ReceiptPreview } from './components/Receipt';
 import { Shell } from './components/Shell';
 import { useAuthSession } from './hooks/useAuthSession';
 import { useRestaurantStore } from './hooks/useRestaurantStore';
-import type { CartItem, MenuItem, PaymentMode, Transaction } from './types/models';
+import type { CartItem, MenuItem, PaymentMode, RestaurantTable, TableOrder, TableOrderStatus, Transaction } from './types/models';
 import { calculateTotals, formatINR } from './utils/money';
 
 const paymentModes: PaymentMode[] = ['Cash', 'UPI', 'Card', 'Split Payment'];
@@ -29,7 +29,7 @@ export default function App() {
   const totals = calculateTotals(cart, discount, redeemPoints, store.branchTax);
 
   useEffect(() => {
-    if (auth.session?.role === 'user' && !['Dashboard', 'POS', 'Loyalty'].includes(store.activeTab)) {
+    if (auth.session?.role === 'user' && !['Dashboard', 'POS', 'Tables', 'Loyalty'].includes(store.activeTab)) {
       store.setActiveTab('POS');
     }
   }, [auth.session, store]);
@@ -125,6 +125,18 @@ export default function App() {
       )}
 
       {store.activeTab === 'Dashboard' && <Dashboard store={store} />}
+      {store.activeTab === 'Tables' && (
+        <TableOrdersSection
+          tables={store.branchTables}
+          orders={store.branchTableOrders}
+          menu={store.branchMenu}
+          taxRate={store.branchTax.rate}
+          isAdmin={auth.session.role === 'admin'}
+          onTableUpdate={store.updateTable}
+          onAddWaiterOrder={store.addWaiterTableOrder}
+          onOrderStatusUpdate={store.updateTableOrderStatus}
+        />
+      )}
       {auth.session.role === 'admin' && store.activeTab === 'Inventory' && <Inventory items={store.branchMenu} onSave={store.updateMenuItem} onCreate={store.addMenuItem} />}
       {store.activeTab === 'Loyalty' && <Loyalty members={customers} branchId={store.activeBranchId} onRegister={store.registerMember} />}
       {auth.session.role === 'admin' && store.activeTab === 'Attendance' && <Attendance employees={store.branchEmployees} onCycle={store.cycleAttendance} />}
@@ -168,6 +180,164 @@ function Dashboard({ store }: { store: ReturnType<typeof useRestaurantStore> }) 
 
 function Metric({ title, value }: { title: string; value: string }) {
   return <div className="metric"><span>{title}</span><strong>{value}</strong></div>;
+}
+
+function TableOrdersSection({
+  tables,
+  orders,
+  menu,
+  taxRate,
+  isAdmin,
+  onTableUpdate,
+  onAddWaiterOrder,
+  onOrderStatusUpdate,
+}: {
+  tables: RestaurantTable[];
+  orders: TableOrder[];
+  menu: MenuItem[];
+  taxRate: number;
+  isAdmin: boolean;
+  onTableUpdate: (table: RestaurantTable) => Promise<void>;
+  onAddWaiterOrder: (input: { tableId: string; items: CartItem[]; note: string }) => Promise<void>;
+  onOrderStatusUpdate: (orderId: string, status: TableOrderStatus) => Promise<void>;
+}) {
+  const [selectedTableId, setSelectedTableId] = useState(tables[0]?.id ?? '');
+  const [waiterCart, setWaiterCart] = useState<CartItem[]>([]);
+  const [waiterNote, setWaiterNote] = useState('');
+  const selectedTable = tables.find((table) => table.id === selectedTableId) ?? tables[0];
+  const selectedOrders = orders.filter((order) => order.tableId === selectedTable?.id);
+  const qrOrders = selectedOrders.filter((order) => order.source === 'QR');
+  const waiterOrders = selectedOrders.filter((order) => order.source === 'Waiter');
+  const waiterTotal = waiterCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  const addWaiterItem = (item: MenuItem) => {
+    setWaiterCart((existing) => {
+      const found = existing.find((cartItem) => cartItem.menuItemId === item.id);
+      if (found) return existing.map((cartItem) => (cartItem.menuItemId === item.id ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem));
+      return [...existing, { menuItemId: item.id, name: item.name, price: item.price, quantity: 1, note: '', taxRate }];
+    });
+  };
+
+  const updateWaiterQuantity = (id: string, quantity: number) => {
+    setWaiterCart((existing) => existing.map((item) => (item.menuItemId === id ? { ...item, quantity: Math.max(quantity, 1) } : item)));
+  };
+
+  const submitWaiterOrder = async () => {
+    if (!selectedTable) return;
+    await onAddWaiterOrder({ tableId: selectedTable.id, items: waiterCart, note: waiterNote });
+    setWaiterCart([]);
+    setWaiterNote('');
+  };
+
+  if (!selectedTable) return <section className="table-panel"><div className="empty">No tables configured for this branch.</div></section>;
+
+  return (
+    <section className="tables-workspace">
+      <div className="table-layout-card">
+        <div className="panel-heading">
+          <div>
+            <h2>Table Layout</h2>
+            <span>Click a table to view QR and waiter orders separately.</span>
+          </div>
+        </div>
+        <div className="restaurant-floor">
+          {tables.map((table) => (
+            <button
+              className={`floor-table ${table.status.toLowerCase().replace(/\s+/g, '-')} ${selectedTable.id === table.id ? 'selected' : ''}`}
+              key={table.id}
+              onClick={() => setSelectedTableId(table.id)}
+              aria-label={`Table ${table.number}`}
+            >
+              {table.number}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <aside className="table-detail-card">
+        <div className="table-detail-header">
+          <div>
+            <span>Selected table</span>
+            <h2>Table {selectedTable.number}</h2>
+            <p>{selectedTable.seats} seats</p>
+          </div>
+          {isAdmin ? (
+            <select value={selectedTable.status} onChange={(event) => onTableUpdate({ ...selectedTable, status: event.target.value as RestaurantTable['status'] })}>
+              <option>Available</option>
+              <option>Occupied</option>
+              <option>Needs Service</option>
+              <option>Billing</option>
+            </select>
+          ) : (
+            <span className={`table-status-pill ${selectedTable.status.toLowerCase().replace(/\s+/g, '-')}`}>{selectedTable.status}</span>
+          )}
+        </div>
+
+        <div className="split-orders">
+          <OrderColumn title="QR Orders" orders={qrOrders} isAdmin={isAdmin} onOrderStatusUpdate={onOrderStatusUpdate} />
+          <OrderColumn title="Waiter Orders" orders={waiterOrders} isAdmin={isAdmin} onOrderStatusUpdate={onOrderStatusUpdate} />
+        </div>
+
+        <div className="waiter-order-builder">
+          <div className="panel-heading">
+            <h2>Add Waiter Order</h2>
+            <span>{formatINR(waiterTotal)}</span>
+          </div>
+          <div className="compact-menu-grid">
+            {menu.filter((item) => item.available).slice(0, 8).map((item) => (
+              <button key={item.id} onClick={() => addWaiterItem(item)}>
+                <span>{item.name}</span>
+                <b>{formatINR(item.price)}</b>
+              </button>
+            ))}
+          </div>
+          <div className="waiter-cart-list">
+            {waiterCart.map((item) => (
+              <div className="waiter-cart-row" key={item.menuItemId}>
+                <span>{item.name}</span>
+                <div className="qty"><button onClick={() => updateWaiterQuantity(item.menuItemId, item.quantity - 1)}>-</button><span>{item.quantity}</span><button onClick={() => updateWaiterQuantity(item.menuItemId, item.quantity + 1)}>+</button></div>
+                <b>{formatINR(item.price * item.quantity)}</b>
+              </div>
+            ))}
+            {waiterCart.length === 0 && <div className="empty small">Select menu items to create a waiter order for this table.</div>}
+          </div>
+          <label>Order note <input value={waiterNote} onChange={(event) => setWaiterNote(event.target.value)} placeholder="Kitchen note or service instruction" /></label>
+          <button className="button primary" disabled={waiterCart.length === 0} onClick={submitWaiterOrder}>Send Waiter Order</button>
+        </div>
+      </aside>
+    </section>
+  );
+}
+
+function OrderColumn({ title, orders, isAdmin, onOrderStatusUpdate }: { title: string; orders: TableOrder[]; isAdmin: boolean; onOrderStatusUpdate: (orderId: string, status: TableOrderStatus) => Promise<void> }) {
+  const statuses: TableOrderStatus[] = ['Placed', 'Preparing', 'Served', 'Cancelled'];
+  return (
+    <div className="order-column">
+      <h3>{title}</h3>
+      {orders.map((order) => (
+        <article className="table-order-card" key={order.id}>
+          <div className="table-order-topline">
+            <span>{new Date(order.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+            {isAdmin ? (
+              <select value={order.status} onChange={(event) => onOrderStatusUpdate(order.id, event.target.value as TableOrderStatus)}>
+                {statuses.map((status) => <option key={status}>{status}</option>)}
+              </select>
+            ) : (
+              <b>{order.status}</b>
+            )}
+          </div>
+          {order.items.map((item) => (
+            <div className="table-order-line" key={`${order.id}-${item.menuItemId}-${item.note}`}>
+              <span>{item.name} x {item.quantity}</span>
+              <b>{formatINR(item.price * item.quantity)}</b>
+            </div>
+          ))}
+          {order.note && <p>{order.note}</p>}
+        </article>
+      ))}
+      {orders.length === 0 && <div className="empty small">No {title.toLowerCase()} for this table.</div>}
+    </div>
+  );
 }
 
 function Inventory({ items, onSave, onCreate }: { items: MenuItem[]; onSave: (item: MenuItem) => Promise<void>; onCreate: (item: Omit<MenuItem, 'id' | 'branchId'>) => Promise<void> }) {
